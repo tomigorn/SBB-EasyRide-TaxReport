@@ -1,0 +1,6 @@
+@SBB.EasyRide.TaxReport.Api_HostAddress = http://localhost:5296
+
+GET {{SBB.EasyRide.TaxReport.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

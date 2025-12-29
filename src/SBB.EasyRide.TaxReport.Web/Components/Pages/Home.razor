@@ -1,0 +1,41 @@
+﻿@page "/"
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<h1>API Test</h1>
+
+@if (apiStatus is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <p>API: @apiStatus</p>
+    <p>Infra: @infraStatus</p>
+}
+
+@code {
+    private string? apiStatus;
+    private string? infraStatus;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<HealthResponse>("api/health");
+            apiStatus = response?.status;
+            infraStatus = response?.infra;
+        }
+        catch (Exception ex)
+        {
+            apiStatus = $"Error: {ex.Message}";
+            infraStatus = "";
+        }
+    }
+
+    private class HealthResponse
+    {
+        public string? status { get; set; }
+        public string? infra { get; set; }
+    }
+}
