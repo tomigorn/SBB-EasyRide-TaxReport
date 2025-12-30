@@ -123,7 +123,9 @@ else
     </div>
     <div class="form-text">
         Add subjects to search for (emails matching ANY of these will be included) <br/>
-        Ihr Abo-Kauf im ZVV-Ticketshop, Ihr Online-Kauf bei der SBB, EasyRide Kaufquittung
+        <button class="btn btn-sm btn-outline-secondary mt-1" @onclick="AddDefaultFilters">
+            Add common filters: @string.Join(", ", defaultFilters)
+        </button>
     </div>
 </div>
 
@@ -169,6 +171,16 @@ else
     <div class="mb-3">
         <button class="btn btn-success" @onclick="GenerateCsv" disabled="@isLoading">
             Download CSV Report
+        </button>
+        <button class="btn btn-primary ms-2" @onclick="GeneratePdf" disabled="@isLoading">
+            @if (isPdfGenerating)
+            {
+                <span>Generating PDF...</span>
+            }
+            else
+            {
+                <span>Generate Merged PDF Report</span>
+            }
         </button>
     </div>
     
@@ -219,6 +231,13 @@ else if (searchResults != null)
 }
 
 @code {
+    private readonly string[] defaultFilters = new[] 
+    {
+        "Ihr Abo-Kauf im ZVV-Ticketshop",
+        "Ihr Online-Kauf bei der SBB",
+        "EasyRide Kaufquittung"
+    };
+
     private string dateMode = "Year";
     private int selectedYear = DateTime.Now.Year;
     private DateOnly startDate = DateOnly.FromDateTime(DateTime.Now.AddMonths(-1));
@@ -230,7 +249,7 @@ else if (searchResults != null)
     private bool isLoaded = false;
     private string userName = string.Empty;
     private bool isLoading = false;
-    private string testResult = string.Empty;
+    private bool isPdfGenerating = false;
     private string errorMessage = string.Empty;
     private List<EmailSearchResult>? searchResults = null;
 
@@ -285,36 +304,14 @@ else if (searchResults != null)
         }
     }
 
-    private async Task TestGetLastEmail()
+    private void AddDefaultFilters()
     {
-        isLoading = true;
-        testResult = string.Empty;
-        errorMessage = string.Empty;
-        StateHasChanged();
-
-        try
+        foreach (var filter in defaultFilters)
         {
-            // Step 1: Get access token for Microsoft Graph
-            var scopes = new[] { "https://graph.microsoft.com/Mail.Read" };
-            var accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
-
-            // After getting the token, decode and log it
-            Console.WriteLine($"[DEBUG] Full token: {accessToken}");
-
-            // Step 2: Call our service with the token
-            var subject = await EmailService.GetLastEmailSubjectAsync(accessToken);
-
-            // Step 3: Display the result
-            testResult = subject ?? "(No emails found)";
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
+            if (!subjectFilters.Contains(filter))
+            {
+                subjectFilters.Add(filter);
+            }
         }
     }
 
@@ -323,7 +320,6 @@ else if (searchResults != null)
         isLoading = true;
         searchResults = null;
         errorMessage = string.Empty;
-        testResult = string.Empty;
         StateHasChanged();
 
         try
@@ -415,5 +411,40 @@ else if (searchResults != null)
         var fileName = $"EasyRide_Report_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
         
         await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+    }
+
+    private async Task GeneratePdf()
+    {
+        if (searchResults == null || !searchResults.Any())
+            return;
+
+        isPdfGenerating = true;
+        errorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            // Get access token
+            var scopes = new[] { "https://graph.microsoft.com/Mail.Read" };
+            var accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
+
+            // Generate merged PDF
+            var pdfBytes = await EmailService.GenerateMergedPdfReportAsync(accessToken, searchResults);
+            
+            // Download via JavaScript
+            var base64 = Convert.ToBase64String(pdfBytes);
+            var fileName = $"EasyRide_Report_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"PDF generation failed: {ex.Message}";
+        }
+        finally
+        {
+            isPdfGenerating = false;
+            StateHasChanged();
+        }
     }
 }

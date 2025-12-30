@@ -18,4 +18,9 @@ public interface IEmailService
     /// Searches for emails within a date range and matching subject filters
     /// </summary>
     Task<List<EmailSearchResult>> SearchEmailsAsync(string accessToken, DateTime startDate, DateTime endDate, List<string>? subjectFilters = null);
+    
+    /// <summary>
+    /// Generates a merged PDF report from emails and their attachments
+    /// </summary>
+    Task<byte[]> GenerateMergedPdfReportAsync(string accessToken, List<EmailSearchResult> emails);
 }

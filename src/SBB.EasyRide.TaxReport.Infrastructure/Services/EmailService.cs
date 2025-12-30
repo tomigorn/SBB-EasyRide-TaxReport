@@ -4,6 +4,12 @@ using System.Web;
 using System.Text.RegularExpressions;
 using SBB.EasyRide.TaxReport.Infrastructure.Models;
 using UglyToad.PdfPig;
+using iText.Kernel.Pdf;
+using iText.Layout;
+using iText.Layout.Element;
+using iText.Layout.Properties;
+using iText.IO.Font.Constants;
+using iText.Kernel.Font;
 
 namespace SBB.EasyRide.TaxReport.Infrastructure.Services;
 
@@ -171,6 +177,122 @@ public class EmailService : IEmailService
         }
         
         return results;
+    }
+
+    public async Task<byte[]> GenerateMergedPdfReportAsync(string accessToken, List<EmailSearchResult> emails)
+    {
+        using var outputStream = new MemoryStream();
+        using var pdfWriter = new PdfWriter(outputStream);
+        using var pdfDocument = new iText.Kernel.Pdf.PdfDocument(pdfWriter);
+        using var document = new Document(pdfDocument);
+        
+        var font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA);
+        var boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD);
+        
+        Console.WriteLine($"[EmailService] Generating PDF report for {emails.Count} emails");
+        
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+        
+        foreach (var email in emails)
+        {
+            Console.WriteLine($"[EmailService] Processing email: {email.Subject}");
+            
+            // Add email as page with formatted content
+            if (pdfDocument.GetNumberOfPages() > 0)
+            {
+                pdfDocument.AddNewPage();
+            }
+            
+            // Email header section
+            var titleParagraph = new Paragraph(email.Subject)
+                .SetFont(boldFont)
+                .SetFontSize(16)
+                .SetMarginBottom(10);
+            document.Add(titleParagraph);
+            
+            // Email metadata
+            var metaTable = new Table(2).UseAllAvailableWidth();
+            metaTable.AddCell(CreateCell("From:", boldFont));
+            metaTable.AddCell(CreateCell(email.From, font));
+            metaTable.AddCell(CreateCell("Received:", boldFont));
+            metaTable.AddCell(CreateCell(email.ReceivedDateTime.ToLocalTime().ToString("dd.MM.yyyy HH:mm"), font));
+            
+            if (!string.IsNullOrEmpty(email.TransactionDate))
+            {
+                metaTable.AddCell(CreateCell("Transaction Date:", boldFont));
+                metaTable.AddCell(CreateCell(email.TransactionDate, font));
+            }
+            
+            if (!string.IsNullOrEmpty(email.Amount))
+            {
+                metaTable.AddCell(CreateCell("Amount:", boldFont));
+                metaTable.AddCell(CreateCell($"CHF {email.Amount}", font));
+            }
+            
+            document.Add(metaTable);
+            document.Add(new Paragraph("\n"));
+            
+            // Email body (cleaned HTML)
+            var bodyText = Regex.Replace(email.BodyContent, @"<[^>]+>", " ");
+            bodyText = System.Net.WebUtility.HtmlDecode(bodyText);
+            bodyText = Regex.Replace(bodyText, @"\s+", " ").Trim();
+            
+            if (bodyText.Length > 1000)
+            {
+                bodyText = bodyText.Substring(0, 1000) + "...";
+            }
+            
+            var bodyParagraph = new Paragraph(bodyText)
+                .SetFont(font)
+                .SetFontSize(10)
+                .SetMarginBottom(15);
+            document.Add(bodyParagraph);
+            
+            // Get and merge PDF attachments
+            var pdfAttachments = await GetPdfAttachmentsAsync(httpClient, email.Id);
+            
+            if (pdfAttachments.Any())
+            {
+                Console.WriteLine($"[EmailService] Merging {pdfAttachments.Count} PDF attachment(s)");
+                
+                foreach (var pdfBytes in pdfAttachments)
+                {
+                    try
+                    {
+                        using var attachmentStream = new MemoryStream(pdfBytes);
+                        using var attachmentPdf = new iText.Kernel.Pdf.PdfDocument(new PdfReader(attachmentStream));
+                        
+                        // Copy all pages from attachment
+                        for (int i = 1; i <= attachmentPdf.GetNumberOfPages(); i++)
+                        {
+                            var page = attachmentPdf.GetPage(i);
+                            pdfDocument.AddPage(page.CopyTo(pdfDocument));
+                        }
+                        
+                        Console.WriteLine($"[EmailService] Merged PDF attachment with {attachmentPdf.GetNumberOfPages()} pages");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[EmailService] Failed to merge PDF attachment: {ex.Message}");
+                    }
+                }
+            }
+        }
+        
+        document.Close();
+        Console.WriteLine($"[EmailService] PDF generation complete. Total pages: {pdfDocument.GetNumberOfPages()}");
+        
+        return outputStream.ToArray();
+    }
+    
+    private Cell CreateCell(string text, PdfFont font)
+    {
+        return new Cell()
+            .Add(new Paragraph(text).SetFont(font).SetFontSize(10))
+            .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
+            .SetPadding(2);
     }
 
     private static string? ExtractAmount(string emailBody)
@@ -359,7 +481,7 @@ public class EmailService : IEmailService
         try
         {
             using var memoryStream = new MemoryStream(pdfBytes);
-            using var document = PdfDocument.Open(memoryStream);
+            using var document = UglyToad.PdfPig.PdfDocument.Open(memoryStream);
             
             var text = string.Join(" ", document.GetPages().Select(page => page.Text));
             Console.WriteLine($"[EmailService] Extracted {text.Length} characters from PDF");
