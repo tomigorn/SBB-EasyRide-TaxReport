@@ -1,3 +1,5 @@
+using SBB.EasyRide.TaxReport.Infrastructure.Models;
+
 namespace SBB.EasyRide.TaxReport.Infrastructure.Services;
 
 /// <summary>
@@ -11,4 +13,9 @@ public interface IEmailService
     /// <param name="accessToken">Microsoft Graph access token</param>
     /// <returns>Subject of the last email, or null if none found</returns>
     Task<string?> GetLastEmailSubjectAsync(string accessToken);
+    
+    /// <summary>
+    /// Searches for emails within a date range and matching a subject filter
+    /// </summary>
+    Task<List<EmailSearchResult>> SearchEmailsAsync(string accessToken, DateTime startDate, DateTime endDate, string? subjectFilter = null);
 }
