@@ -1,5 +1,10 @@
 ﻿@page "/"
-@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Web
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h1>SBB EasyRide – Tax Report</h1>
 
@@ -7,8 +12,23 @@
 
 <h3>Authentication</h3>
 
-<button class="btn btn-primary">Login</button>
-<button class="btn btn-secondary ms-2">Logout</button>
+<p>Debug: isLoaded=@isLoaded, isAuthenticated=@isAuthenticated, userName=@userName</p>
+
+@if (!isLoaded)
+{
+    <p>Loading...</p>
+}
+else if (isAuthenticated)
+{
+    <p>Welcome, @userName!</p>
+    <button class="btn btn-secondary" @onclick="HandleLogout">Logout</button>
+}
+else
+{
+    <form method="get" action="MicrosoftIdentity/Account/SignIn">
+        <button type="submit" class="btn btn-primary">Login</button>
+    </form>
+}
 
 <hr />
 
@@ -81,16 +101,22 @@
     <label class="form-label">Mail address</label>
     <input type="email"
            class="form-control"
-           style="max-width: 400px;"
-           placeholder="noreply@order.info.sbb.ch" />
+           style="max-width: 400px;" />
+
+    <div class="form-text">
+        Sender address to filter by (e.g. noreply@order.info.sbb.ch)
+    </div>
 </div>
 
 <div class="mb-3">
     <label class="form-label">Mail subject</label>
     <input type="text"
            class="form-control"
-           style="max-width: 600px;"
-           placeholder="EasyRide Kaufquittung" />
+           style="max-width: 600px;" />
+
+    <div class="form-text">
+        Subject contains this text (e.g. EasyRide Kaufquittung)
+    </div>
 </div>
 
 <hr />
@@ -101,4 +127,22 @@
 
 @code {
     private string dateMode = "Year"; // default
+    private bool isAuthenticated = false;
+    private bool isLoaded = false;
+    private string userName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        isAuthenticated = user.Identity?.IsAuthenticated ?? false;
+        userName = user.Identity?.Name ?? "Unknown";
+        isLoaded = true;
+    }
+
+    private void HandleLogout()
+    {
+        Navigation.NavigateTo("Account/Logout", forceLoad: true);
+    }
 }

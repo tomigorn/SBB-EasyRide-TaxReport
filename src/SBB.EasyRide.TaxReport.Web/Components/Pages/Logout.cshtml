@@ -1,0 +1,8 @@
+@page
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@{
+    // Sign out only from the local application cookie, not from Microsoft
+    await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    Response.Redirect("/");
+}
