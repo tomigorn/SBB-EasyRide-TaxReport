@@ -9,4 +9,9 @@ public class EmailSearchResult
     public string Subject { get; set; } = string.Empty;
     public DateTime ReceivedDateTime { get; set; }
     public string From { get; set; } = string.Empty;
+    public string BodyContent { get; set; } = string.Empty;
+    
+    // Parsed values from email body
+    public string? Amount { get; set; }
+    public string? TransactionDate { get; set; }
 }

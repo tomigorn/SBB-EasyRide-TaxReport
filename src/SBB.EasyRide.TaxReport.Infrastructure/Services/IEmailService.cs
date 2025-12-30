@@ -15,7 +15,7 @@ public interface IEmailService
     Task<string?> GetLastEmailSubjectAsync(string accessToken);
     
     /// <summary>
-    /// Searches for emails within a date range and matching a subject filter
+    /// Searches for emails within a date range and matching subject filters
     /// </summary>
-    Task<List<EmailSearchResult>> SearchEmailsAsync(string accessToken, DateTime startDate, DateTime endDate, string? subjectFilter = null);
+    Task<List<EmailSearchResult>> SearchEmailsAsync(string accessToken, DateTime startDate, DateTime endDate, List<string>? subjectFilters = null);
 }

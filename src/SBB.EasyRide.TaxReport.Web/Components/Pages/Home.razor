@@ -6,11 +6,14 @@
 @using SBB.EasyRide.TaxReport.Infrastructure.Services
 @using SBB.EasyRide.TaxReport.Infrastructure.Models
 @using SBB.EasyRide.TaxReport.Web.Services
+@using System.Text
+@using Microsoft.JSInterop
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ITokenAcquisition TokenAcquisition
 @inject IEmailService EmailService
 @inject StartupService StartupService
+@inject IJSRuntime JSRuntime
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h1>SBB EasyRide – Tax Report</h1>
@@ -25,7 +28,7 @@
 }
 else if (isAuthenticated)
 {
-    <p>Welcome, @userName!</p>
+    <p>Mail used for search: @userName</p>
     <button class="btn btn-secondary" @onclick="HandleLogout">Logout</button>
 }
 else
@@ -106,28 +109,52 @@ else
 <h3>Mail Settings</h3>
 
 <div class="mb-3">
-    <label class="form-label">Mail address</label>
-    <input type="email"
-           class="form-control"
-           style="max-width: 400px;" />
-
+    <label class="form-label">Mail subject filters</label>
+    <div class="input-group" style="max-width: 600px;">
+        <input type="text"
+               @bind="subjectFilterInput"
+               @bind:event="oninput"
+               @onkeypress="HandleKeyPress"
+               class="form-control"
+               placeholder="e.g. EasyRide, Ihr Online-Kauf" />
+        <button class="btn btn-primary" @onclick="AddSubjectFilter" disabled="@string.IsNullOrWhiteSpace(subjectFilterInput)">
+            Add
+        </button>
+    </div>
     <div class="form-text">
-        Sender address to filter by (e.g. noreply@order.info.sbb.ch)
+        Add subjects to search for (emails matching ANY of these will be included) <br/>
+        Ihr Abo-Kauf im ZVV-Ticketshop, Ihr Online-Kauf bei der SBB, EasyRide Kaufquittung
     </div>
 </div>
 
-<div class="mb-3">
-    <label class="form-label">Mail subject</label>
-    <input type="text"
-           @bind="subjectFilter"
-           class="form-control"
-           style="max-width: 600px;"
-           placeholder="e.g. EasyRide" />
-
-    <div class="form-text">
-        Subject contains this text (e.g. EasyRide Kaufquittung)
+@if (subjectFilters.Any())
+{
+    <div class="mb-3">
+        <label class="form-label">Active filters:</label>
+        <div class="d-flex flex-wrap gap-2">
+            @foreach (var filter in subjectFilters)
+            {
+                <span class="badge bg-secondary d-flex align-items-center gap-2" style="font-size: 1rem; padding: 0.5rem 0.75rem;">
+                    @filter
+                    <button type="button" class="btn-close btn-close-white" style="font-size: 0.7rem;" @onclick="() => RemoveSubjectFilter(filter)" aria-label="Remove"></button>
+                </span>
+            }
+        </div>
     </div>
-</div>
+}
+
+<hr />
+
+<button class="btn btn-primary" @onclick="SearchEmails" disabled="@(!isAuthenticated || isLoading)">
+    @if (isLoading)
+    {
+        <span>Searching...</span>
+    }
+    else
+    {
+        <span>Search Emails</span>
+    }
+</button>
 
 <hr />
 
@@ -139,13 +166,21 @@ else
         <strong>Found @searchResults.Count email(s)</strong>
     </div>
     
+    <div class="mb-3">
+        <button class="btn btn-success" @onclick="GenerateCsv" disabled="@isLoading">
+            Download CSV Report
+        </button>
+    </div>
+    
     <div class="table-responsive">
         <table class="table table-striped">
             <thead>
                 <tr>
                     <th>Received Date</th>
+                    <th>Transaction Date</th>
                     <th>From</th>
                     <th>Subject</th>
+                    <th>Amount (CHF)</th>
                 </tr>
             </thead>
             <tbody>
@@ -153,11 +188,19 @@ else
                 {
                     <tr>
                         <td>@email.ReceivedDateTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@(email.TransactionDate ?? "-")</td>
                         <td>@email.From</td>
                         <td>@email.Subject</td>
+                        <td>@(email.Amount ?? "-")</td>
                     </tr>
                 }
             </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="4" class="text-end">Total:</th>
+                    <th>CHF @CalculateTotal()</th>
+                </tr>
+            </tfoot>
         </table>
     </div>
 }
@@ -175,58 +218,13 @@ else if (searchResults != null)
     </div>
 }
 
-<button class="btn btn-primary" @onclick="SearchEmails" disabled="@(!isAuthenticated || isLoading)">
-    @if (isLoading)
-    {
-        <span>Searching...</span>
-    }
-    else
-    {
-        <span>Search Emails</span>
-    }
-</button>
-
-<hr />
-
-<h3>Test: Get Last Email Subject</h3>
-
-@if (!string.IsNullOrEmpty(testResult))
-{
-    <div class="alert alert-info">
-        <strong>Last email subject:</strong> @testResult
-    </div>
-}
-
-@if (!string.IsNullOrEmpty(errorMessage))
-{
-    <div class="alert alert-danger">
-        <strong>Error:</strong> @errorMessage
-    </div>
-}
-
-<button class="btn btn-primary" @onclick="TestGetLastEmail" disabled="@(!isAuthenticated || isLoading)">
-    @if (isLoading)
-    {
-        <span>Loading...</span>
-    }
-    else
-    {
-        <span>Test: Get Last Email</span>
-    }
-</button>
-
-<hr />
-
-<button class="btn btn-success btn-lg" disabled>
-    Generate report (Coming soon)
-</button>
-
 @code {
     private string dateMode = "Year";
     private int selectedYear = DateTime.Now.Year;
     private DateOnly startDate = DateOnly.FromDateTime(DateTime.Now.AddMonths(-1));
     private DateOnly endDate = DateOnly.FromDateTime(DateTime.Now);
-    private string subjectFilter = string.Empty;
+    private string subjectFilterInput = string.Empty;
+    private List<string> subjectFilters = new List<string>();
     
     private bool isAuthenticated = false;
     private bool isLoaded = false;
@@ -262,6 +260,29 @@ else if (searchResults != null)
     private void HandleLogout()
     {
         Navigation.NavigateTo("Account/Logout", forceLoad: true);
+    }
+
+    private void AddSubjectFilter()
+    {
+        var trimmed = subjectFilterInput.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmed) && !subjectFilters.Contains(trimmed))
+        {
+            subjectFilters.Add(trimmed);
+            subjectFilterInput = string.Empty;
+        }
+    }
+
+    private void RemoveSubjectFilter(string filter)
+    {
+        subjectFilters.Remove(filter);
+    }
+
+    private void HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(subjectFilterInput))
+        {
+            AddSubjectFilter();
+        }
     }
 
     private async Task TestGetLastEmail()
@@ -330,7 +351,7 @@ else if (searchResults != null)
                 accessToken, 
                 searchStart, 
                 searchEnd, 
-                string.IsNullOrWhiteSpace(subjectFilter) ? null : subjectFilter
+                subjectFilters.Any() ? subjectFilters : null
             );
         }
         catch (Exception ex)
@@ -342,5 +363,57 @@ else if (searchResults != null)
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private string CalculateTotal()
+    {
+        if (searchResults == null || !searchResults.Any())
+            return "0.00";
+
+        decimal total = 0;
+        foreach (var email in searchResults)
+        {
+            if (!string.IsNullOrEmpty(email.Amount))
+            {
+                // Parse amount, handling both . and ' as thousand separators
+                var cleanAmount = email.Amount.Replace("'", "").Replace(",", ".");
+                if (decimal.TryParse(cleanAmount, out var amount))
+                {
+                    total += amount;
+                }
+            }
+        }
+        return total.ToString("N2");
+    }
+
+    private async Task GenerateCsv()
+    {
+        if (searchResults == null || !searchResults.Any())
+            return;
+
+        var csv = new StringBuilder();
+        
+        // Header
+        csv.AppendLine("Date,Amount (CHF),Subject");
+        
+        // Data rows
+        foreach (var email in searchResults)
+        {
+            var date = email.TransactionDate ?? email.ReceivedDateTime.ToString("dd.MM.yyyy");
+            var amount = email.Amount ?? "0.00";
+            var subject = email.Subject.Replace(",", ";"); // Escape commas in subject
+            
+            csv.AppendLine($"{date},{amount},\"{subject}\"");
+        }
+        
+        // Total row
+        csv.AppendLine($"TOTAL,{CalculateTotal()},");
+        
+        // Download via JavaScript
+        var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+        var base64 = Convert.ToBase64String(bytes);
+        var fileName = $"EasyRide_Report_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+        
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
     }
 }
