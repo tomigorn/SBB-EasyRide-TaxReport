@@ -1,41 +1,104 @@
 ﻿@page "/"
-@using System.Net.Http.Json
-@inject HttpClient Http
+@rendermode InteractiveServer
 
-<h1>API Test</h1>
+<h1>SBB EasyRide – Tax Report</h1>
 
-@if (apiStatus is null)
-{
-    <p>Loading...</p>
-}
-else
-{
-    <p>API: @apiStatus</p>
-    <p>Infra: @infraStatus</p>
-}
+<hr />
+
+<h3>Authentication</h3>
+
+<button class="btn btn-primary">Login</button>
+<button class="btn btn-secondary ms-2">Logout</button>
+
+<hr />
+
+<h3>Report Date Selection</h3>
+
+<!-- DATE MODE TOGGLE -->
+<div class="mb-3">
+    <label class="form-label">Select date mode</label>
+
+    <div class="d-flex gap-4">
+        <div class="form-check">
+            <input class="form-check-input"
+                   type="radio"
+                   name="dateMode"
+                   checked="@(dateMode == "Year")"
+                   @onclick="@(() => dateMode = "Year")" />
+            <label class="form-check-label">Year</label>
+        </div>
+
+        <div class="form-check">
+            <input class="form-check-input"
+                   type="radio"
+                   name="dateMode"
+                   checked="@(dateMode == "Range")"
+                   @onclick="@(() => dateMode = "Range")" />
+            <label class="form-check-label">Specific date range</label>
+        </div>
+    </div>
+</div>
+
+<!-- INPUTS -->
+<div class="d-flex gap-5 align-items-start">
+
+    <!-- YEAR -->
+    <div>
+        <label class="form-label" style="@(dateMode != "Year" ? "text-decoration: line-through;" : "")">Year</label>
+        <select class="form-select"
+                style="max-width: 200px;"
+                disabled="@(dateMode != "Year")">
+            @for (int year = DateTime.Now.Year; year >= 1980; year--)
+            {
+                <option value="@year">@year</option>
+            }
+        </select>
+    </div>
+
+    <!-- DATE RANGE -->
+    <div>
+        <label class="form-label" style="@(dateMode != "Range" ? "text-decoration: line-through;" : "")">Date range</label>
+        <div class="d-flex gap-2">
+            <input type="date"
+                   class="form-control"
+                   style="max-width: 200px;"
+                   disabled="@(dateMode != "Range")" />
+
+            <input type="date"
+                   class="form-control"
+                   style="max-width: 200px;"
+                   disabled="@(dateMode != "Range")" />
+        </div>
+    </div>
+
+</div>
+
+<hr />
+
+<h3>Mail Settings</h3>
+
+<div class="mb-3">
+    <label class="form-label">Mail address</label>
+    <input type="email"
+           class="form-control"
+           style="max-width: 400px;"
+           placeholder="noreply@order.info.sbb.ch" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Mail subject</label>
+    <input type="text"
+           class="form-control"
+           style="max-width: 600px;"
+           placeholder="EasyRide Kaufquittung" />
+</div>
+
+<hr />
+
+<button class="btn btn-success btn-lg">
+    Generate report
+</button>
 
 @code {
-    private string? apiStatus;
-    private string? infraStatus;
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            var response = await Http.GetFromJsonAsync<HealthResponse>("api/health");
-            apiStatus = response?.status;
-            infraStatus = response?.infra;
-        }
-        catch (Exception ex)
-        {
-            apiStatus = $"Error: {ex.Message}";
-            infraStatus = "";
-        }
-    }
-
-    private class HealthResponse
-    {
-        public string? status { get; set; }
-        public string? infra { get; set; }
-    }
+    private string dateMode = "Year"; // default
 }
