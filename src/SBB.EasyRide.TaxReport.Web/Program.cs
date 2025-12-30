@@ -1,7 +1,10 @@
 using SBB.EasyRide.TaxReport.Web.Components;
+using SBB.EasyRide.TaxReport.Web.Services;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
+using SBB.EasyRide.TaxReport.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +19,13 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
             {
                 // Force account selection every time
                 context.ProtocolMessage.Prompt = "select_account";
+                
+                // Request Mail.Read scope upfront during initial login
+                if (!context.ProtocolMessage.Scope.Contains("Mail.Read"))
+                {
+                    context.ProtocolMessage.Scope += " https://graph.microsoft.com/Mail.Read";
+                }
+                
                 return Task.CompletedTask;
             }
         };
@@ -23,6 +33,16 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .EnableTokenAcquisitionToCallDownstreamApi()
     .AddMicrosoftGraph(builder.Configuration.GetSection("MicrosoftGraph"))
     .AddInMemoryTokenCaches();
+
+// Configure authentication cookies to not persist
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(15); // Short session
+    options.SlidingExpiration = false; // Don't extend session
+    options.Cookie.IsEssential = true;
+});
 
 builder.Services.AddAuthorization();
 
@@ -35,14 +55,17 @@ builder.Services.AddRazorPages()
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// <-- Add this block to configure HttpClient for API calls
-builder.Services.AddHttpClient("api", client =>
-{
-    client.BaseAddress = new Uri("http://localhost:5296/"); // your API URL
-});
-builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("api"));
+// Register Infrastructure services
+builder.Services.AddHttpClient(); // Required for EmailService
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+// Register startup service to track server restarts
+builder.Services.AddSingleton<StartupService>();
 
 var app = builder.Build();
+
+// Note: In-memory token cache automatically clears on server restart
+// Users will need to login fresh each time the app starts
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

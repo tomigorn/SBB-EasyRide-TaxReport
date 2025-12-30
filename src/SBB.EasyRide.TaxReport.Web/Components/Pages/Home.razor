@@ -2,8 +2,14 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Identity.Web
+@using SBB.EasyRide.TaxReport.Infrastructure.Services
+@using SBB.EasyRide.TaxReport.Web.Services
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
+@inject ITokenAcquisition TokenAcquisition
+@inject IEmailService EmailService
+@inject StartupService StartupService
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h1>SBB EasyRide – Tax Report</h1>
@@ -11,8 +17,6 @@
 <hr />
 
 <h3>Authentication</h3>
-
-<p>Debug: isLoaded=@isLoaded, isAuthenticated=@isAuthenticated, userName=@userName</p>
 
 @if (!isLoaded)
 {
@@ -121,6 +125,35 @@ else
 
 <hr />
 
+<h3>Test: Get Last Email Subject</h3>
+
+@if (!string.IsNullOrEmpty(testResult))
+{
+    <div class="alert alert-info">
+        <strong>Last email subject:</strong> @testResult
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">
+        <strong>Error:</strong> @errorMessage
+    </div>
+}
+
+<button class="btn btn-primary" @onclick="TestGetLastEmail" disabled="@(!isAuthenticated || isLoading)">
+    @if (isLoading)
+    {
+        <span>Loading...</span>
+    }
+    else
+    {
+        <span>Test: Get Last Email</span>
+    }
+</button>
+
+<hr />
+
 <button class="btn btn-success btn-lg">
     Generate report
 </button>
@@ -130,11 +163,27 @@ else
     private bool isAuthenticated = false;
     private bool isLoaded = false;
     private string userName = string.Empty;
+    private bool isLoading = false;
+    private string testResult = string.Empty;
+    private string errorMessage = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        // Check if this is the first request after server restart
+        if (StartupService.IsFirstRequestAfterStartup())
+        {
+            // Force logout to clear any stale authentication
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                Console.WriteLine("[Home] Server restart detected - forcing logout");
+                Navigation.NavigateTo("Account/Logout", forceLoad: true);
+                return;
+            }
+        }
+
+        var authState2 = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState2.User;
 
         isAuthenticated = user.Identity?.IsAuthenticated ?? false;
         userName = user.Identity?.Name ?? "Unknown";
@@ -144,5 +193,38 @@ else
     private void HandleLogout()
     {
         Navigation.NavigateTo("Account/Logout", forceLoad: true);
+    }
+
+    private async Task TestGetLastEmail()
+    {
+        isLoading = true;
+        testResult = string.Empty;
+        errorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            // Step 1: Get access token for Microsoft Graph
+            var scopes = new[] { "https://graph.microsoft.com/Mail.Read" };
+            var accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
+
+            // After getting the token, decode and log it
+            Console.WriteLine($"[DEBUG] Full token: {accessToken}");
+
+            // Step 2: Call our service with the token
+            var subject = await EmailService.GetLastEmailSubjectAsync(accessToken);
+
+            // Step 3: Display the result
+            testResult = subject ?? "(No emails found)";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
     }
 }
