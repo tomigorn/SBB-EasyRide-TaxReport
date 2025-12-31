@@ -1,0 +1,32 @@
+services:
+  sbb-easyride-taxreport:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sbb-easyride-taxreport
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=https://+:8081;http://+:8080
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/app/localhost.pfx
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=
+      # Azure AD Configuration (populated from .env file)
+      - AzureAd__Instance=https://login.microsoftonline.com/
+      - AzureAd__TenantId=${AZURE_TENANT_ID}
+      - AzureAd__ClientId=${AZURE_CLIENT_ID}
+      - AzureAd__ClientSecret=${AZURE_CLIENT_SECRET}
+      - AzureAd__ClientSecretExpiration=${AZURE_CLIENT_SECRET_EXPIRATION}
+      - AzureAd__CallbackPath=/signin-oidc
+      - AzureAd__SignedOutCallbackPath=/signout-callback-oidc
+      # Microsoft Graph Configuration
+      - MicrosoftGraph__BaseUrl=https://graph.microsoft.com/v1.0
+      - MicrosoftGraph__Scopes=User.Read Mail.Read Mail.ReadBasic
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

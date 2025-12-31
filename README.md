@@ -237,6 +237,58 @@ var amount = new string(email.Amount
 
    Navigate to: <a href="https://localhost:7022" target="_blank">https://localhost:7022</a>
 
+### 3. Docker Deployment (Alternative)
+
+For containerized deployment with Docker:
+
+1. **Update Azure AD Redirect URIs:**
+   - Go to [Azure Portal](https://portal.azure.com) → Your App → Authentication
+   - Add these redirect URIs:
+     - `https://localhost:8081/signin-oidc` (for local Docker with HTTPS)
+     - `https://localhost:8081/signout-callback-oidc`
+     - Or use your actual domain: `https://yourdomain.com/signin-oidc`
+   - **Note:** Azure AD requires HTTPS redirect URIs
+
+2. **Create `.env` file:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Edit `.env` file:**
+   ```env
+   AZURE_TENANT_ID=common
+   AZURE_CLIENT_ID=YOUR_CLIENT_ID_HERE
+   AZURE_CLIENT_SECRET=YOUR_CLIENT_SECRET_HERE
+   AZURE_CLIENT_SECRET_EXPIRATION=12/30/2027
+   ```
+
+4. **Build and run with Docker Compose:**
+   ```bash
+   docker-compose up -d
+   ```
+
+   Navigate to: <a href="https://localhost:8081" target="_blank">https://localhost:8081</a>
+   
+   **Note:** Your browser will show a security warning due to the self-signed certificate. This is safe for local development:
+   - Click "Advanced" → "Proceed to localhost (unsafe)" (Chrome)
+   - Or "Accept the Risk and Continue" (Firefox)
+
+5. **View logs:**
+   ```bash
+   docker-compose logs -f
+   ```
+
+6. **Stop container:**
+   ```bash
+   docker-compose down
+   ```
+
+**Production Deployment Notes:**
+- Use a reverse proxy (nginx/Traefik) for HTTPS termination
+- Update redirect URIs to match your production domain
+- Consider using Docker secrets instead of `.env` for sensitive data
+- Use a distributed cache (Redis) instead of in-memory caching for multi-instance deployments
+
 ## 📖 Usage
 
 1. **Login:**
@@ -289,9 +341,10 @@ var amount = new string(email.Amount
 
 ### Known Limitations
 
-- **Email Limit:** 75 emails per search (Microsoft Graph default `$top`)
-- **Cache:** In-memory only (clears on restart, suitable for single-user dev)
+- **Email Limit:** 75 emails per search (Microsoft Graph API practical limit)
+- **Cache:** In-memory only (clears on restart, suitable for single-user deployments)
 - **No Pagination:** For >75 emails, use narrower date filters
+- **Multi-Instance:** Requires distributed cache (Redis) for load-balanced deployments
 
 ### Enhancement Ideas
 

@@ -8,6 +8,21 @@ using SBB.EasyRide.TaxReport.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel for Docker deployment
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(8080); // HTTP
+    options.ListenAnyIP(8081, listenOptions =>
+    {
+        // HTTPS will be configured via environment variables in Docker
+        // ASPNETCORE_Kestrel__Certificates__Default__Path and Password
+        if (builder.Environment.IsProduction())
+        {
+            listenOptions.UseHttps();
+        }
+    });
+});
+
 // Add Microsoft Identity authentication
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(options =>
@@ -71,10 +86,14 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
+    // Removed HSTS for Docker deployment (handle HTTPS at reverse proxy level)
 }
 
-app.UseHttpsRedirection();
+// Only redirect to HTTPS in development (local)
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -1,3 +1,6 @@
+.env
+
+
 # ########################################
 # ########################################
 # Created by https://www.toptal.com/developers/gitignore/api/aspnetcore,visualstudio,visualstudiocode
@@ -542,3 +545,4 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/aspnetcore,visualstudio,visualstudiocode
+
