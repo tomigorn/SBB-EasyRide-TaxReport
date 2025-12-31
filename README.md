@@ -235,7 +235,7 @@ var amount = new string(email.Amount
    dotnet run
    ```
 
-   Navigate to: `https://localhost:7022`
+   Navigate to: <a href="https://localhost:7022" target="_blank">https://localhost:7022</a>
 
 ## 📖 Usage
 
