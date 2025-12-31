@@ -289,9 +289,9 @@ var amount = new string(email.Amount
 
 ### Known Limitations
 
-- **Email Limit:** 100 emails per search (Microsoft Graph default `$top`)
+- **Email Limit:** 75 emails per search (Microsoft Graph default `$top`)
 - **Cache:** In-memory only (clears on restart, suitable for single-user dev)
-- **No Pagination:** For >100 emails, use narrower date filters
+- **No Pagination:** For >75 emails, use narrower date filters
 
 ### Enhancement Ideas
 

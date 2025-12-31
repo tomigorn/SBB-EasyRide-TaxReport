@@ -265,6 +265,16 @@ else
         <strong>Found @searchResults!.Count email(s)</strong>
     </div>
     
+    @if (searchResults!.Count >= 75)
+    {
+        <div class="alert alert-warning" role="alert">
+            <strong>⚠️ Result Limit Reached</strong><br/>
+            The search has returned @searchResults!.Count emails, which may be hitting the API result limit. There could be additional emails matching your criteria that are not shown.
+            <br/><br/>
+            <strong>Suggestion:</strong> Try narrowing your search by using a shorter date range or more specific subject filters.
+        </div>
+    }
+    
     <div class="mb-3">
         <button class="btn btn-success" @onclick="GenerateCsv" disabled="@(isLoading || isPdfGenerating)">
             Download CSV Report
