@@ -169,12 +169,13 @@ else
     </div>
     
     <div class="mb-3">
-        <button class="btn btn-success" @onclick="GenerateCsv" disabled="@isLoading">
+        <button class="btn btn-success" @onclick="GenerateCsv" disabled="@(isLoading || isPdfGenerating)">
             Download CSV Report
         </button>
-        <button class="btn btn-primary ms-2" @onclick="GeneratePdf" disabled="@isLoading">
+        <button class="btn btn-primary ms-2" @onclick="GeneratePdf" disabled="@(isLoading || isPdfGenerating)">
             @if (isPdfGenerating)
             {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                 <span>Generating PDF...</span>
             }
             else
@@ -183,6 +184,21 @@ else
             }
         </button>
     </div>
+    
+    @if (isPdfGenerating)
+    {
+        <div class="alert alert-info" role="alert">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div>
+                    <strong>Generating PDF report...</strong><br/>
+                    <small>Processing @searchResults?.Count email(s) and merging PDF attachments. This may take a moment.</small>
+                </div>
+            </div>
+        </div>
+    }
     
     <div class="table-responsive">
         <table class="table table-striped">
@@ -428,12 +444,12 @@ else if (searchResults != null)
             var scopes = new[] { "https://graph.microsoft.com/Mail.Read" };
             var accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
 
-            // Generate merged PDF
-            var pdfBytes = await EmailService.GenerateMergedPdfReportAsync(accessToken, searchResults);
+            // Generate ZIP file with all PDFs
+            var zipBytes = await EmailService.GenerateMergedPdfReportAsync(accessToken, searchResults);
             
             // Download via JavaScript
-            var base64 = Convert.ToBase64String(pdfBytes);
-            var fileName = $"EasyRide_Report_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            var base64 = Convert.ToBase64String(zipBytes);
+            var fileName = $"EasyRide_Report_{DateTime.Now:yyyyMMdd_HHmmss}.zip";
             
             await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
         }

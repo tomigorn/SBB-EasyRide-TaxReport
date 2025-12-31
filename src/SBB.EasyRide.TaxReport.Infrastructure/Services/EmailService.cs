@@ -4,12 +4,8 @@ using System.Web;
 using System.Text.RegularExpressions;
 using SBB.EasyRide.TaxReport.Infrastructure.Models;
 using UglyToad.PdfPig;
-using iText.Kernel.Pdf;
-using iText.Layout;
-using iText.Layout.Element;
-using iText.Layout.Properties;
-using iText.IO.Font.Constants;
-using iText.Kernel.Font;
+using System.IO.Compression;
+using iText.Html2pdf;
 
 namespace SBB.EasyRide.TaxReport.Infrastructure.Services;
 
@@ -181,118 +177,272 @@ public class EmailService : IEmailService
 
     public async Task<byte[]> GenerateMergedPdfReportAsync(string accessToken, List<EmailSearchResult> emails)
     {
-        using var outputStream = new MemoryStream();
-        using var pdfWriter = new PdfWriter(outputStream);
-        using var pdfDocument = new iText.Kernel.Pdf.PdfDocument(pdfWriter);
-        using var document = new Document(pdfDocument);
-        
-        var font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA);
-        var boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD);
-        
-        Console.WriteLine($"[EmailService] Generating PDF report for {emails.Count} emails");
-        
-        using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
-        
-        foreach (var email in emails)
+        try
         {
-            Console.WriteLine($"[EmailService] Processing email: {email.Subject}");
+            Console.WriteLine($"[EmailService] Starting report generation for {emails.Count} emails");
             
-            // Add email as page with formatted content
-            if (pdfDocument.GetNumberOfPages() > 0)
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+            
+            // Create ZIP archive to hold all HTML files and PDF attachments
+            using var zipStream = new MemoryStream();
+            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
             {
-                pdfDocument.AddNewPage();
-            }
-            
-            // Email header section
-            var titleParagraph = new Paragraph(email.Subject)
-                .SetFont(boldFont)
-                .SetFontSize(16)
-                .SetMarginBottom(10);
-            document.Add(titleParagraph);
-            
-            // Email metadata
-            var metaTable = new Table(2).UseAllAvailableWidth();
-            metaTable.AddCell(CreateCell("From:", boldFont));
-            metaTable.AddCell(CreateCell(email.From, font));
-            metaTable.AddCell(CreateCell("Received:", boldFont));
-            metaTable.AddCell(CreateCell(email.ReceivedDateTime.ToLocalTime().ToString("dd.MM.yyyy HH:mm"), font));
-            
-            if (!string.IsNullOrEmpty(email.TransactionDate))
-            {
-                metaTable.AddCell(CreateCell("Transaction Date:", boldFont));
-                metaTable.AddCell(CreateCell(email.TransactionDate, font));
-            }
-            
-            if (!string.IsNullOrEmpty(email.Amount))
-            {
-                metaTable.AddCell(CreateCell("Amount:", boldFont));
-                metaTable.AddCell(CreateCell($"CHF {email.Amount}", font));
-            }
-            
-            document.Add(metaTable);
-            document.Add(new Paragraph("\n"));
-            
-            // Email body (cleaned HTML)
-            var bodyText = Regex.Replace(email.BodyContent, @"<[^>]+>", " ");
-            bodyText = System.Net.WebUtility.HtmlDecode(bodyText);
-            bodyText = Regex.Replace(bodyText, @"\s+", " ").Trim();
-            
-            if (bodyText.Length > 1000)
-            {
-                bodyText = bodyText.Substring(0, 1000) + "...";
-            }
-            
-            var bodyParagraph = new Paragraph(bodyText)
-                .SetFont(font)
-                .SetFontSize(10)
-                .SetMarginBottom(15);
-            document.Add(bodyParagraph);
-            
-            // Get and merge PDF attachments
-            var pdfAttachments = await GetPdfAttachmentsAsync(httpClient, email.Id);
-            
-            if (pdfAttachments.Any())
-            {
-                Console.WriteLine($"[EmailService] Merging {pdfAttachments.Count} PDF attachment(s)");
+                int emailCounter = 1;
                 
-                foreach (var pdfBytes in pdfAttachments)
+                foreach (var email in emails)
                 {
                     try
                     {
-                        using var attachmentStream = new MemoryStream(pdfBytes);
-                        using var attachmentPdf = new iText.Kernel.Pdf.PdfDocument(new PdfReader(attachmentStream));
+                        Console.WriteLine($"[EmailService] Processing email {emailCounter}/{emails.Count}: {email.Subject}");
                         
-                        // Copy all pages from attachment
-                        for (int i = 1; i <= attachmentPdf.GetNumberOfPages(); i++)
+                        // Fetch full email with HTML body
+                        var emailHtml = await GetEmailHtmlBodyAsync(httpClient, email.Id);
+                        
+                        if (string.IsNullOrEmpty(emailHtml))
                         {
-                            var page = attachmentPdf.GetPage(i);
-                            pdfDocument.AddPage(page.CopyTo(pdfDocument));
+                            Console.WriteLine($"[EmailService] No HTML body for email: {email.Subject}");
+                            emailCounter++;
+                            continue;
                         }
                         
-                        Console.WriteLine($"[EmailService] Merged PDF attachment with {attachmentPdf.GetNumberOfPages()} pages");
+                        // Download and embed inline images
+                        emailHtml = await EmbedInlineImagesAsync(httpClient, email.Id, emailHtml);
+                        
+                        // Wrap email HTML in a complete HTML document with print styles
+                        var htmlDocument = $@"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>{System.Net.WebUtility.HtmlEncode(email.Subject ?? "Email")}</title>
+    <style>
+        body {{ 
+            font-family: Arial, sans-serif; 
+            margin: 20px;
+            background-color: white;
+        }}
+        .email-header {{ 
+            border-bottom: 2px solid #333; 
+            padding-bottom: 10px; 
+            margin-bottom: 20px;
+            page-break-after: avoid;
+        }}
+        .email-header h2 {{ 
+            margin: 0 0 10px 0; 
+            color: #333; 
+        }}
+        .email-meta {{ 
+            font-size: 12px; 
+            color: #666; 
+            margin: 5px 0; 
+        }}
+        .email-body {{ 
+            margin-top: 20px; 
+        }}
+        img {{ 
+            max-width: 100%; 
+            height: auto; 
+        }}
+        @media print {{
+            body {{ margin: 0.5cm; }}
+            .email-header {{ page-break-after: avoid; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class='email-header'>
+        <h2>{System.Net.WebUtility.HtmlEncode(email.Subject ?? "No Subject")}</h2>
+        <div class='email-meta'><strong>From:</strong> {System.Net.WebUtility.HtmlEncode(email.From ?? "Unknown")}</div>
+        <div class='email-meta'><strong>Received:</strong> {email.ReceivedDateTime.ToLocalTime():dd.MM.yyyy HH:mm}</div>
+        {(!string.IsNullOrEmpty(email.TransactionDate) ? $"<div class='email-meta'><strong>Transaction Date:</strong> {email.TransactionDate}</div>" : "")}
+        {(!string.IsNullOrEmpty(email.Amount) ? $"<div class='email-meta'><strong>Amount:</strong> CHF {email.Amount}</div>" : "")}
+    </div>
+    <div class='email-body'>
+        {emailHtml}
+    </div>
+</body>
+</html>";
+                        
+                        // Create safe filename from subject
+                        var safeSubject = string.Join("_", email.Subject?.Split(Path.GetInvalidFileNameChars()) ?? new[] { "Email" });
+                        if (safeSubject.Length > 50)
+                        {
+                            safeSubject = safeSubject.Substring(0, 50);
+                        }
+                        
+                        var emailFileName = $"{emailCounter:D3}_{safeSubject}.html";
+                        
+                        // Convert HTML to PDF using iText7
+                        var pdfFileName = $"{emailCounter:D3}_{safeSubject}.pdf";
+                        var pdfEntry = archive.CreateEntry(pdfFileName, CompressionLevel.Optimal);
+                        using (var pdfStream = pdfEntry.Open())
+                        {
+                            HtmlConverter.ConvertToPdf(htmlDocument, pdfStream);
+                        }
+                        
+                        Console.WriteLine($"[EmailService] Added email PDF: {pdfFileName}");
+                        
+                        // Get PDF attachments and add them to ZIP
+                        var pdfAttachments = await GetPdfAttachmentsWithNamesAsync(httpClient, email.Id);
+                        
+                        if (pdfAttachments.Any())
+                        {
+                            Console.WriteLine($"[EmailService] Adding {pdfAttachments.Count} PDF attachment(s)");
+                            
+                            int attachCounter = 1;
+                            foreach (var (pdfBytes, attachmentName) in pdfAttachments)
+                            {
+                                try
+                                {
+                                    var attachmentFileName = $"{emailCounter:D3}_{attachCounter:D2}_{attachmentName}";
+                                    var attachmentEntry = archive.CreateEntry(attachmentFileName, CompressionLevel.Optimal);
+                                    using (var entryStream = attachmentEntry.Open())
+                                    {
+                                        await entryStream.WriteAsync(pdfBytes, 0, pdfBytes.Length);
+                                    }
+                                    
+                                    Console.WriteLine($"[EmailService] Added PDF attachment: {attachmentFileName}");
+                                    attachCounter++;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"[EmailService] Failed to add PDF attachment: {ex.Message}");
+                                }
+                            }
+                        }
+                        
+                        emailCounter++;
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[EmailService] Failed to merge PDF attachment: {ex.Message}");
+                        Console.WriteLine($"[EmailService] Error processing email {email.Subject}: {ex.Message}");
+                        Console.WriteLine($"[EmailService] Stack trace: {ex.StackTrace}");
+                        emailCounter++;
+                        // Continue with next email
                     }
                 }
             }
+            
+            var result = zipStream.ToArray();
+            Console.WriteLine($"[EmailService] ZIP generation complete. Size: {result.Length} bytes");
+            
+            return result;
         }
-        
-        document.Close();
-        Console.WriteLine($"[EmailService] PDF generation complete. Total pages: {pdfDocument.GetNumberOfPages()}");
-        
-        return outputStream.ToArray();
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[EmailService] FATAL ERROR in PDF generation: {ex.Message}");
+            Console.WriteLine($"[EmailService] Exception type: {ex.GetType().Name}");
+            Console.WriteLine($"[EmailService] Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[EmailService] Inner exception: {ex.InnerException.Message}");
+            }
+            throw new Exception($"PDF generation failed: {ex.Message}", ex);
+        }
     }
     
-    private Cell CreateCell(string text, PdfFont font)
+    private async Task<string?> GetEmailHtmlBodyAsync(HttpClient httpClient, string messageId)
     {
-        return new Cell()
-            .Add(new Paragraph(text).SetFont(font).SetFontSize(10))
-            .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
-            .SetPadding(2);
+        try
+        {
+            var url = $"https://graph.microsoft.com/v1.0/me/messages/{messageId}?$select=body";
+            var response = await httpClient.GetAsync(url);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"[EmailService] Failed to get email HTML: {response.StatusCode}");
+                return null;
+            }
+            
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            
+            if (doc.RootElement.TryGetProperty("body", out var bodyElement) &&
+                bodyElement.TryGetProperty("content", out var contentElement))
+            {
+                return contentElement.GetString();
+            }
+            
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[EmailService] Error getting email HTML body: {ex.Message}");
+            return null;
+        }
+    }
+    
+    private async Task<string> EmbedInlineImagesAsync(HttpClient httpClient, string messageId, string htmlContent)
+    {
+        try
+        {
+            // Find all CID references in HTML (src="cid:...")
+            var cidMatches = Regex.Matches(htmlContent, @"src=""cid:([^""]+)""", RegexOptions.IgnoreCase);
+            
+            if (!cidMatches.Any())
+            {
+                return htmlContent;
+            }
+            
+            // Get all attachments (including inline images)
+            var url = $"https://graph.microsoft.com/v1.0/me/messages/{messageId}/attachments?$select=id,name,contentId,contentBytes,contentType";
+            var response = await httpClient.GetAsync(url);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"[EmailService] Failed to get attachments for inline images: {response.StatusCode}");
+                return htmlContent;
+            }
+            
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            
+            if (!doc.RootElement.TryGetProperty("value", out var attachments))
+            {
+                return htmlContent;
+            }
+            
+            // Create a dictionary of contentId -> base64 data
+            var imageMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var attachment in attachments.EnumerateArray())
+            {
+                if (attachment.TryGetProperty("contentId", out var contentIdElement) &&
+                    attachment.TryGetProperty("contentBytes", out var contentBytesElement) &&
+                    attachment.TryGetProperty("contentType", out var contentTypeElement))
+                {
+                    var contentId = contentIdElement.GetString();
+                    var contentBytes = contentBytesElement.GetString();
+                    var contentType = contentTypeElement.GetString();
+                    
+                    if (!string.IsNullOrEmpty(contentId) && !string.IsNullOrEmpty(contentBytes))
+                    {
+                        // Remove angle brackets if present (e.g., <image001.png@01D...> -> image001.png@01D...)
+                        contentId = contentId.Trim('<', '>');
+                        imageMap[contentId] = $"data:{contentType};base64,{contentBytes}";
+                    }
+                }
+            }
+            
+            // Replace all CID references with base64 data URIs
+            foreach (Match match in cidMatches)
+            {
+                var cid = match.Groups[1].Value;
+                if (imageMap.TryGetValue(cid, out var dataUri))
+                {
+                    htmlContent = htmlContent.Replace($"cid:{cid}", dataUri);
+                    Console.WriteLine($"[EmailService] Embedded inline image: {cid}");
+                }
+            }
+            
+            return htmlContent;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[EmailService] Error embedding inline images: {ex.Message}");
+            return htmlContent; // Return original HTML if embedding fails
+        }
     }
 
     private static string? ExtractAmount(string emailBody)
@@ -420,9 +570,9 @@ public class EmailService : IEmailService
         return null;
     }
 
-    private async Task<List<byte[]>> GetPdfAttachmentsAsync(HttpClient httpClient, string messageId)
+    private async Task<List<(byte[] bytes, string name)>> GetPdfAttachmentsWithNamesAsync(HttpClient httpClient, string messageId)
     {
-        var pdfList = new List<byte[]>();
+        var pdfList = new List<(byte[], string)>();
         
         try
         {
@@ -453,12 +603,12 @@ public class EmailService : IEmailService
             {
                 Console.WriteLine($"[EmailService] Processing PDF: {attachment.Name}");
                 
-                if (!string.IsNullOrEmpty(attachment.ContentBytes))
+                if (!string.IsNullOrEmpty(attachment.ContentBytes) && !string.IsNullOrEmpty(attachment.Name))
                 {
                     try
                     {
                         var pdfBytes = Convert.FromBase64String(attachment.ContentBytes);
-                        pdfList.Add(pdfBytes);
+                        pdfList.Add((pdfBytes, attachment.Name));
                         Console.WriteLine($"[EmailService] Successfully decoded PDF: {attachment.Name} ({pdfBytes.Length} bytes)");
                     }
                     catch (Exception ex)
@@ -474,6 +624,12 @@ public class EmailService : IEmailService
         }
         
         return pdfList;
+    }
+    
+    private async Task<List<byte[]>> GetPdfAttachmentsAsync(HttpClient httpClient, string messageId)
+    {
+        var attachmentsWithNames = await GetPdfAttachmentsWithNamesAsync(httpClient, messageId);
+        return attachmentsWithNames.Select(x => x.bytes).ToList();
     }
     
     private static string ExtractTextFromPdf(byte[] pdfBytes)
