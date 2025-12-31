@@ -8,17 +8,99 @@
 @using SBB.EasyRide.TaxReport.Web.Services
 @using System.Text
 @using Microsoft.JSInterop
+@using Microsoft.Extensions.Configuration
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ITokenAcquisition TokenAcquisition
 @inject IEmailService EmailService
 @inject StartupService StartupService
 @inject IJSRuntime JSRuntime
+@inject IConfiguration Configuration
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h1>SBB & ZVV Tax Report Generator</h1>
 
 <hr />
+
+@if (isConfigurationInvalid)
+{
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">🔴 Configuration Error!</h4>
+        <p><strong>@configurationError</strong></p>
+        <hr />
+        
+        @if (configurationError.Contains("expired"))
+        {
+            <h5>How to fix expired secret:</h5>
+            @if (!string.IsNullOrEmpty(secretExpirationDate))
+            {
+                <p class="text-danger"><strong>Expired on: @secretExpirationDate</strong></p>
+            }
+            <ol>
+                <li><strong>Create new secret in Azure Portal:</strong>
+                    <ul>
+                        <li>Go to <a href="https://portal.azure.com" target="_blank">Azure Portal</a></li>
+                        <li>Navigate to: <strong>Azure Active Directory → App registrations → Your app → Certificates & secrets</strong></li>
+                        <li>Click <strong>"New client secret"</strong> → Choose expiration period (e.g., 24 months) → Click <strong>"Add"</strong></li>
+                        <li>Copy the <strong>Value</strong> immediately (it won't show again!) and note the <strong>Expires</strong> date</li>
+                    </ul>
+                </li>
+                <li><strong>Update your local secrets:</strong>
+                    <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientSecret" "YOUR_NEW_SECRET_VALUE"
+dotnet user-secrets set "AzureAd:ClientSecretExpiration" "MM/DD/YYYY"</pre>
+                    <p><small><em>Example: "12/30/2027" (use the exact date format shown in Azure Portal)</em></small></p>
+                </li>
+                <li><strong>Restart the application</strong></li>
+            </ol>
+        }
+        else
+        {
+            <h5>How to configure:</h5>
+            
+            @if (configurationError.Contains("ClientId"))
+            {
+                <p><strong>Get your ClientId from Azure Portal:</strong></p>
+                <ul>
+                    <li>Go to <a href="https://portal.azure.com" target="_blank">Azure Portal</a></li>
+                    <li>Navigate to: <strong>Azure Active Directory → App registrations → Your app → Overview</strong></li>
+                    <li>Copy the <strong>"Application (client) ID"</strong></li>
+                </ul>
+                <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientId" "YOUR_CLIENT_ID"</pre>
+            }
+            
+            @if (configurationError.Contains("TenantId"))
+            {
+                <p><strong>Set your TenantId:</strong></p>
+                <p>Use <code>common</code> for personal Microsoft accounts, or copy your Tenant ID from Azure Portal for work accounts.</p>
+                <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:TenantId" "common"</pre>
+            }
+            
+            @if (configurationError.Contains("ClientSecret"))
+            {
+                <p><strong>Create a ClientSecret in Azure Portal:</strong></p>
+                <ul>
+                    <li>Go to <a href="https://portal.azure.com" target="_blank">Azure Portal</a></li>
+                    <li>Navigate to: <strong>Azure Active Directory → App registrations → Your app → Certificates & secrets</strong></li>
+                    <li>Click <strong>"New client secret"</strong> → Choose expiration period (e.g., 24 months) → Click <strong>"Add"</strong></li>
+                    <li>Copy the <strong>Value</strong> immediately (it won't show again!) and note the <strong>Expires</strong> date</li>
+                </ul>
+                <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientSecret" "YOUR_CLIENT_SECRET_VALUE"
+dotnet user-secrets set "AzureAd:ClientSecretExpiration" "MM/DD/YYYY"</pre>
+                <p><small><em>Example: "12/30/2027" (use the exact date format shown in Azure Portal)</em></small></p>
+            }
+            
+            <hr />
+            <p><strong>View your current secrets:</strong></p>
+            <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets list</pre>
+            
+            <p><strong>Then restart the application.</strong></p>
+        }
+    </div>
+}
 
 <h3>Authentication</h3>
 
@@ -115,15 +197,14 @@ else
                @bind="subjectFilterInput"
                @bind:event="oninput"
                @onkeypress="HandleKeyPress"
-               class="form-control"
-               placeholder="e.g. EasyRide, Ihr Online-Kauf" />
+               class="form-control"/>
         <button class="btn btn-primary" @onclick="AddSubjectFilter" disabled="@string.IsNullOrWhiteSpace(subjectFilterInput)">
             Add
         </button>
     </div>
     <div class="form-text">
         Add subjects to search for (emails matching ANY of these will be included) <br/>
-        <button class="btn btn-sm btn-outline-secondary mt-1" @onclick="AddDefaultFilters">
+        <button class="btn btn-sm btn-info mt-1" @onclick="AddDefaultFilters">
             Add common filters: @string.Join(", ", defaultFilters)
         </button>
     </div>
@@ -286,10 +367,16 @@ else if (searchResults != null)
     private bool isLoading = false;
     private bool isPdfGenerating = false;
     private string errorMessage = string.Empty;
+    private bool isConfigurationInvalid = false;
+    private string configurationError = string.Empty;
+    private string? secretExpirationDate = null;
     private List<EmailSearchResult>? searchResults = null;
 
     protected override async Task OnInitializedAsync()
     {
+        // Check if configuration is valid
+        CheckConfiguration();
+        
         // Check if this is the first request after server restart
         if (StartupService.IsFirstRequestAfterStartup())
         {
@@ -498,6 +585,53 @@ else if (searchResults != null)
         {
             isPdfGenerating = false;
             StateHasChanged();
+        }
+    }
+
+    private void CheckConfiguration()
+    {
+        // Check if required secrets are set
+        var clientId = Configuration["AzureAd:ClientId"];
+        var clientSecret = Configuration["AzureAd:ClientSecret"];
+        var tenantId = Configuration["AzureAd:TenantId"];
+        
+        if (string.IsNullOrEmpty(clientId) || clientId == "WILL_BE_SET_IN_USER_SECRETS")
+        {
+            isConfigurationInvalid = true;
+            configurationError = "Azure AD ClientId is not configured. Authentication will not work.";
+            return;
+        }
+        
+        if (string.IsNullOrEmpty(clientSecret) || clientSecret == "WILL_BE_SET_IN_USER_SECRETS")
+        {
+            isConfigurationInvalid = true;
+            configurationError = "Azure AD ClientSecret is not configured. Authentication will not work.";
+            return;
+        }
+        
+        if (string.IsNullOrEmpty(tenantId) || tenantId == "WILL_BE_SET_IN_USER_SECRETS")
+        {
+            isConfigurationInvalid = true;
+            configurationError = "Azure AD TenantId is not configured. Authentication will not work.";
+            return;
+        }
+        
+        // Check if client secret is expired
+        var expirationDateStr = Configuration["AzureAd:ClientSecretExpiration"];
+        
+        if (!string.IsNullOrEmpty(expirationDateStr))
+        {
+            // Try to parse with InvariantCulture to handle MM/DD/YYYY format from Azure Portal
+            if (DateTime.TryParse(expirationDateStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var expirationDate))
+            {
+                if (DateTime.Now > expirationDate)
+                {
+                    isConfigurationInvalid = true;
+                    configurationError = "Azure AD Client Secret has expired. Authentication will not work.";
+                    secretExpirationDate = expirationDateStr;
+                    return;
+                }
+            }
         }
     }
 }
