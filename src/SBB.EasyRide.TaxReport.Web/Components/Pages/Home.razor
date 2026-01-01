@@ -26,39 +26,25 @@
 {
     <div class="alert alert-danger" role="alert">
         <h4 class="alert-heading">🔴 Configuration Error!</h4>
-        <p><strong>@configurationError</strong></p>
-        <hr />
-        
-        @if (configurationError.Contains("expired"))
+        @foreach (var error in configurationErrors)
         {
-            <h5>How to fix expired secret:</h5>
+            <p><strong>@error</strong></p>
+        }
+        
+        @if (configurationErrors.Any(e => e.Contains("expired")))
+        {
+            <h5>⚠️ Expired Client Secret</h5>
             @if (!string.IsNullOrEmpty(secretExpirationDate))
             {
                 <p class="text-danger"><strong>Expired on: @secretExpirationDate</strong></p>
             }
-            <ol>
-                <li><strong>Create new secret in Azure Portal:</strong>
-                    <ul>
-                        <li>Go to <a href="https://portal.azure.com" target="_blank">Azure Portal</a></li>
-                        <li>Navigate to: <strong>Azure Active Directory → App registrations → Your app → Certificates & secrets</strong></li>
-                        <li>Click <strong>"New client secret"</strong> → Choose expiration period (e.g., 24 months) → Click <strong>"Add"</strong></li>
-                        <li>Copy the <strong>Value</strong> immediately (it won't show again!) and note the <strong>Expires</strong> date</li>
-                    </ul>
-                </li>
-                <li><strong>Update your local secrets:</strong>
-                    <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
-                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientSecret" "YOUR_NEW_SECRET_VALUE"
-dotnet user-secrets set "AzureAd:ClientSecretExpiration" "MM/DD/YYYY"</pre>
-                    <p><small><em>Example: "12/30/2027" (use the exact date format shown in Azure Portal)</em></small></p>
-                </li>
-                <li><strong>Restart the application</strong></li>
-            </ol>
         }
-        else
-        {
-            <h5>How to configure:</h5>
-            
-            @if (configurationError.Contains("ClientId"))
+        
+        <hr />
+        <h5>How to configure:</h5>
+        <hr />
+        
+        @if (configurationErrors.Any(e => e.Contains("ClientId")))
             {
                 <p><strong>Get your ClientId from Azure Portal:</strong></p>
                 <ul>
@@ -66,39 +52,78 @@ dotnet user-secrets set "AzureAd:ClientSecretExpiration" "MM/DD/YYYY"</pre>
                     <li>Navigate to: <strong>Azure Active Directory → App registrations → Your app → Overview</strong></li>
                     <li>Copy the <strong>"Application (client) ID"</strong></li>
                 </ul>
-                <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
-                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientId" "YOUR_CLIENT_ID"</pre>
+                @if (isRunningInDocker)
+                {
+                    <p>Update your <code>.env</code> file:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">AZURE_CLIENT_ID=YOUR_CLIENT_ID</pre>
+                }
+                else
+                {
+                    <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientId" "YOUR_CLIENT_ID"</pre>
+                }
+            <hr />
             }
             
-            @if (configurationError.Contains("TenantId"))
+            @if (configurationErrors.Any(e => e.Contains("TenantId")))
             {
                 <p><strong>Set your TenantId:</strong></p>
                 <p>Use <code>common</code> for personal Microsoft accounts, or copy your Tenant ID from Azure Portal for work accounts.</p>
-                <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
-                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:TenantId" "common"</pre>
+                @if (isRunningInDocker)
+                {
+                    <p>Update your <code>.env</code> file:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">AZURE_TENANT_ID=common</pre>
+                }
+                else
+                {
+                    <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:TenantId" "common"</pre>
+                }
+            <hr />
             }
             
-            @if (configurationError.Contains("ClientSecret"))
+            @if (configurationErrors.Any(e => e.Contains("ClientSecret")))
             {
-                <p><strong>Create a ClientSecret in Azure Portal:</strong></p>
+                <p><strong>Create a new ClientSecret in Azure Portal:</strong></p>
                 <ul>
                     <li>Go to <a href="https://portal.azure.com" target="_blank">Azure Portal</a></li>
                     <li>Navigate to: <strong>Azure Active Directory → App registrations → Your app → Certificates & secrets</strong></li>
                     <li>Click <strong>"New client secret"</strong> → Choose expiration period (e.g., 24 months) → Click <strong>"Add"</strong></li>
                     <li>Copy the <strong>Value</strong> immediately (it won't show again!) and note the <strong>Expires</strong> date</li>
                 </ul>
-                <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
-                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientSecret" "YOUR_CLIENT_SECRET_VALUE"
+                @if (isRunningInDocker)
+                {
+                    <p>Update your <code>.env</code> file:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">AZURE_CLIENT_SECRET=YOUR_CLIENT_SECRET_VALUE
+AZURE_CLIENT_SECRET_EXPIRATION=MM/DD/YYYY</pre>
+                    <p><small><em>Example: "12/30/2027" (use the exact date format shown in Azure Portal)</em></small></p>
+                }
+                else
+                {
+                    <p>Open PowerShell in: <code>src\SBB.EasyRide.TaxReport.Web</code> and run:</p>
+                    <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets set "AzureAd:ClientSecret" "YOUR_CLIENT_SECRET_VALUE"
 dotnet user-secrets set "AzureAd:ClientSecretExpiration" "MM/DD/YYYY"</pre>
-                <p><small><em>Example: "12/30/2027" (use the exact date format shown in Azure Portal)</em></small></p>
+                    <p><small><em>Example: "12/30/2027" (use the exact date format shown in Azure Portal)</em></small></p>
+                }
+            <hr />
             }
             
-            <hr />
-            <p><strong>View your current secrets:</strong></p>
-            <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets list</pre>
+            @if (!isRunningInDocker)
+            {
+                <p><strong>View your current secrets:</strong></p>
+                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">dotnet user-secrets list</pre>
+            }
             
-            <p><strong>Then restart the application.</strong></p>
-        }
+            <p><strong>After making all changes above, restart the application:</strong></p>
+            @if (isRunningInDocker)
+            {
+                <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px;">docker compose down
+docker compose up -d</pre>
+            }
+            else
+            {
+                <p>Run <code>dotnet run</code> from the <code>src\SBB.EasyRide.TaxReport.Web</code> folder</p>
+            }
     </div>
 }
 
@@ -159,7 +184,7 @@ else
                 @bind="selectedYear"
                 style="max-width: 200px;"
                 disabled="@(dateMode != "Year")">
-            @for (int year = DateTime.Now.Year+1; year >= 2015; year--)
+            @for (int year = DateTime.Now.Year; year >= 2015; year--)
             {
                 <option value="@year">@year</option>
             }
@@ -182,6 +207,7 @@ else
                    style="max-width: 200px;"
                    disabled="@(dateMode != "Range")" />
         </div>
+        <small class="form-text text-muted">Both dates are inclusive</small>
     </div>
 
 </div>
@@ -365,9 +391,9 @@ else if (searchResults != null)
     };
 
     private string dateMode = "Year";
-    private int selectedYear = DateTime.Now.Year;
-    private DateOnly startDate = DateOnly.FromDateTime(DateTime.Now.AddMonths(-1));
-    private DateOnly endDate = DateOnly.FromDateTime(DateTime.Now);
+    private int selectedYear = DateTime.Now.Year - 1;
+    private DateOnly startDate = new DateOnly(DateTime.Now.Year - 1, 1, 1);
+    private DateOnly endDate = new DateOnly(DateTime.Now.Year - 1, 12, 31);
     private string subjectFilterInput = string.Empty;
     private List<string> subjectFilters = new List<string>();
     
@@ -378,12 +404,16 @@ else if (searchResults != null)
     private bool isPdfGenerating = false;
     private string errorMessage = string.Empty;
     private bool isConfigurationInvalid = false;
-    private string configurationError = string.Empty;
+    private List<string> configurationErrors = new List<string>();
     private string? secretExpirationDate = null;
     private List<EmailSearchResult>? searchResults = null;
+    private bool isRunningInDocker = false;
 
     protected override async Task OnInitializedAsync()
     {
+        // Detect if running in Docker
+        isRunningInDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+        
         // Check if configuration is valid
         CheckConfiguration();
         
@@ -600,48 +630,77 @@ else if (searchResults != null)
 
     private void CheckConfiguration()
     {
+        // Clear previous errors
+        configurationErrors.Clear();
+        isConfigurationInvalid = false;
+        secretExpirationDate = null;
+        
         // Check if required secrets are set
         var clientId = Configuration["AzureAd:ClientId"];
         var clientSecret = Configuration["AzureAd:ClientSecret"];
         var tenantId = Configuration["AzureAd:TenantId"];
         
-        if (string.IsNullOrEmpty(clientId) || clientId == "WILL_BE_SET_IN_USER_SECRETS")
+        if (string.IsNullOrWhiteSpace(clientId) 
+            || clientId == "WILL_BE_SET_IN_USER_SECRETS" 
+            || clientId == "YOUR_CLIENT_ID_HERE"
+            || clientId == "PLACEHOLDER_CLIENT_ID")
         {
-            isConfigurationInvalid = true;
-            configurationError = "Azure AD ClientId is not configured. Authentication will not work.";
-            return;
+            configurationErrors.Add("- Azure AD ClientId is not configured.");
         }
         
-        if (string.IsNullOrEmpty(clientSecret) || clientSecret == "WILL_BE_SET_IN_USER_SECRETS")
-        {
-            isConfigurationInvalid = true;
-            configurationError = "Azure AD ClientSecret is not configured. Authentication will not work.";
-            return;
-        }
-        
-        if (string.IsNullOrEmpty(tenantId) || tenantId == "WILL_BE_SET_IN_USER_SECRETS")
-        {
-            isConfigurationInvalid = true;
-            configurationError = "Azure AD TenantId is not configured. Authentication will not work.";
-            return;
-        }
-        
-        // Check if client secret is expired
+        // Check if client secret is expired first (before checking if it's configured)
         var expirationDateStr = Configuration["AzureAd:ClientSecretExpiration"];
+        bool isSecretExpired = false;
         
-        if (!string.IsNullOrEmpty(expirationDateStr))
+        if (!string.IsNullOrEmpty(expirationDateStr)
+            && expirationDateStr != "WILL_BE_SET_IN_USER_SECRETS"
+            && expirationDateStr != "YOUR_CLIENT_SECRET_EXPIRATION_HERE"
+            && expirationDateStr != "PLACEHOLDER_CLIENT_SECRET_EXPIRATION"
+            && expirationDateStr != "MM/DD/YYYY")
         {
             // Try to parse with InvariantCulture to handle MM/DD/YYYY format from Azure Portal
             if (DateTime.TryParse(expirationDateStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var expirationDate))
             {
                 if (DateTime.Now > expirationDate)
                 {
-                    isConfigurationInvalid = true;
-                    configurationError = "Azure AD Client Secret has expired. Authentication will not work.";
+                    configurationErrors.Add("- Azure AD ClientSecret has expired.");
                     secretExpirationDate = expirationDateStr;
-                    return;
+                    isSecretExpired = true;
                 }
             }
+        }
+        
+        // Check if ClientSecret needs to be configured (not set OR expired)
+        if (string.IsNullOrWhiteSpace(clientSecret) 
+            || clientSecret == "WILL_BE_SET_IN_USER_SECRETS" 
+            || clientSecret == "YOUR_CLIENT_SECRET_HERE"
+            || clientSecret == "PLACEHOLDER_CLIENT_SECRET"
+            || isSecretExpired)
+        {
+            // Only add this error if we haven't already added the expiration error
+            // (to avoid saying both "expired" and "not configured" for the same secret)
+            if (!isSecretExpired)
+            {
+                configurationErrors.Add("- Azure AD ClientSecret is not configured.");
+            }
+            else
+            {
+                configurationErrors.Add("- Azure AD ClientSecret needs to be replaced with a new secret.");
+            }
+        }
+        
+        if (string.IsNullOrWhiteSpace(tenantId)
+            || tenantId == "WILL_BE_SET_IN_USER_SECRETS"
+            || tenantId == "YOUR_TENANT_ID_HERE"
+            || tenantId == "PLACEHOLDER_TENANT_ID")
+        {
+            configurationErrors.Add("- Azure AD TenantId is not configured.");
+        }
+        
+        // Set the invalid flag if any errors were found
+        if (configurationErrors.Any())
+        {
+            isConfigurationInvalid = true;
         }
     }
 }

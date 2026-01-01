@@ -8,6 +8,26 @@ using SBB.EasyRide.TaxReport.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Ensure Azure AD configuration has values (use placeholders if missing)
+// This allows the app to boot and show error messages in the UI
+var azureAdConfig = builder.Configuration.GetSection("AzureAd");
+if (string.IsNullOrWhiteSpace(azureAdConfig["ClientId"]))
+{
+    builder.Configuration["AzureAd:ClientId"] = "PLACEHOLDER_CLIENT_ID";
+}
+if (string.IsNullOrWhiteSpace(azureAdConfig["ClientSecret"]))
+{
+    builder.Configuration["AzureAd:ClientSecret"] = "PLACEHOLDER_CLIENT_SECRET";
+}
+if (string.IsNullOrWhiteSpace(azureAdConfig["TenantId"]))
+{
+    builder.Configuration["AzureAd:TenantId"] = "PLACEHOLDER_TENANT_ID";
+}
+if (string.IsNullOrWhiteSpace(azureAdConfig["ClientSecretExpiration"]))
+{
+    builder.Configuration["AzureAd:ClientSecretExpiration"] = "PLACEHOLDER_CLIENT_SECRET_EXPIRATION";
+}
+
 // Configure Kestrel for Docker deployment
 builder.WebHost.ConfigureKestrel(options =>
 {
