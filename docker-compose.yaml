@@ -1,8 +1,12 @@
+# =========================================================
+# Services ================================================
+# =========================================================
 services:
-  sbb-easyride-taxreport:
-    build:
-      context: .
-      dockerfile: Dockerfile
+# #########################################################
+# SBB EasyRide TaxReport ##################################
+# #########################################################
+  sbb_easyride_taxreport:
+    image: tomigorn/sbb-easyride-taxreport:latest
     container_name: sbb-easyride-taxreport
     ports:
       - "8081:8081"
@@ -45,3 +49,4 @@ networks:
 # echo -n "YourPfxPassword" > cert_password.txt
 # docker secret create cert_password cert_password.txt
 # and add the secret name under the service's `secrets:` section above.
+ 
