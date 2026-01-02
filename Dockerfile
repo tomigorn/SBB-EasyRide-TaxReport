@@ -34,12 +34,13 @@ RUN openssl req -x509 -newkey rsa:4096 -keyout /app/localhost.key -out /app/loca
     openssl pkcs12 -export -out /app/localhost.pfx -inkey /app/localhost.key -in /app/localhost.crt -passout pass:
 
 # Expose ports
-EXPOSE 8080
+# HTTPS only
 EXPOSE 8081
 
 # Set environment to Production by default
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV ASPNETCORE_URLS=https://+:8081;http://+:8080
+# Listen on HTTPS only inside container
+ENV ASPNETCORE_URLS=https://+:8081
 ENV ASPNETCORE_Kestrel__Certificates__Default__Path=/app/localhost.pfx
 ENV ASPNETCORE_Kestrel__Certificates__Default__Password=
 
