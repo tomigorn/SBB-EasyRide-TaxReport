@@ -257,6 +257,13 @@ For containerized deployment with Docker:
      - Or use your actual domain: `https://yourdomain.com/signin-oidc`
    - **Note:** Azure AD requires HTTPS redirect URIs
 
+      **Important:** The redirect URI and front-channel logout URI registered in Azure must exactly match the URI your app uses (scheme, host, port and path). If you deploy to a device on your LAN (for example `https://192.168.1.2:8081/` or for local deployment `https://localhost:8081/` or with a changed port `https://192.168.1.2:8083/`), register the exact values such as:
+      - `https://192.168.1.2:8083/signin-oidc`
+      - `https://192.168.1.2:8083/signout-callback-oidc`
+
+      Mismatched ports, missing `/signin-oidc` or incorrect scheme (http vs https) will cause the Azure error: `invalid_request: The provided value for the input parameter 'redirect_uri' is not valid.`
+      HTTPS is required by azure to work.
+
 2. **Create `.env` file:**
    ```bash
    cp .env.example .env
