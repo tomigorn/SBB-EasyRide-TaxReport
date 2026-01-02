@@ -42,6 +42,15 @@ SBB-EasyRide-TaxReport/
 │           └── EmailSearchResult.cs            # Domain model
 ```
 
+### Screenshot — Main Dashboard
+
+Preview of the main dashboard (click to view all screenshots):
+
+[![Main Dashboard](https://github.com/user-attachments/assets/c2c17e94-74a2-4461-a184-fe5a034224e5)](https://github.com/tomigorn/SBB-EasyRide-TaxReport/wiki/Screenshots)
+
+See all screenshots: https://github.com/tomigorn/SBB-EasyRide-TaxReport/wiki/Screenshots
+
+
 ### Technology Stack
 
 **Frontend:**
