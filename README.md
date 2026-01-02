@@ -289,6 +289,73 @@ For containerized deployment with Docker:
 - Consider using Docker secrets instead of `.env` for sensitive data
 - Use a distributed cache (Redis) instead of in-memory caching for multi-instance deployments
 
+### Docker Compose: Certificates & Secrets (Novice + Advanced)
+
+This project supports two simple flows:
+
+- Novice: `docker compose up -d` — the container will generate an untrusted self-signed certificate at startup (suitable for testing). No secrets or certificates are baked into the image.
+- Advanced: mount your own PFX or provide the PFX password via Docker secrets; suitable for production or when you have a trusted certificate.
+
+Files included:
+- `.env.example` — template for runtime environment variables (copy to `.env`). Do NOT commit `.env`.
+- `docker-compose.yml` — ready-to-run example that reads `.env` and maps port 8081.
+
+Novice (quick start)
+1. Copy `.env.example` to `.env` and fill in the Azure AD values (see earlier steps):
+   ```bash
+   cp .env.example .env
+   # edit .env and set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, etc.
+   ```
+2. Start the app:
+   ```bash
+   docker compose up -d
+   ```
+3. Open: https://localhost:8081 (browser will warn about an untrusted certificate)
+
+Provide a custom PFX (advanced)
+1. Create a `certs/` folder next to the repository and place your `localhost.pfx` there (or any name) and uncomment the volume line in `docker-compose.yml`:
+   ```yaml
+   services:
+     sbb-easyride-taxreport:
+       volumes:
+         - ./certs/localhost.pfx:/app/localhost.pfx:ro
+   ```
+2. Put the PFX password in `.env` (ONLY if you mount a PFX; leave empty if you do not):
+   ```env
+   ASPNETCORE_Kestrel__Certificates__Default__Password=YourPfxPassword
+   ```
+
+   Note: If you do not mount a PFX file, leave this password empty — the container's
+   entrypoint will generate an untrusted self-signed certificate at startup and no
+   password is needed. Supplying a password is only necessary when you provide your
+   own PFX file.
+3. Start:
+   ```bash
+   docker compose up -d
+   ```
+
+Use Docker secrets for production (recommended)
+1. Generate a secure password locally and create a Docker secret:
+   ```bash
+   # generate a secure random password (example)
+   openssl rand -base64 32 > cert_password.txt
+   docker secret create cert_password cert_password.txt
+   ```
+
+   Windows PowerShell alternative:
+
+   ```powershell
+   # generate a secure random base64 password (PowerShell)
+   [System.Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }) -as [byte[]]) | Out-File -Encoding ASCII cert_password.txt
+   docker secret create cert_password cert_password.txt
+   ```
+2. Update `docker-compose.yml` to reference the secret under the service (uncomment and use the secret name `cert_password`) and ensure your container reads `/run/secrets/cert_password` into the `ASPNETCORE_Kestrel__Certificates__Default__Password` environment variable (you can add a tiny startup wrapper to export it).
+
+Notes and Security
+- The entrypoint generates a self-signed cert only if `/app/localhost.pfx` is missing. This avoids baking private keys into images.
+- Never push images containing private keys or secrets to registries.
+- For production, terminate TLS at a load balancer or reverse proxy (Traefik, nginx, cloud provider) and store secrets in a proper secret manager.
+
 ## 📖 Usage
 
 1. **Login:**
