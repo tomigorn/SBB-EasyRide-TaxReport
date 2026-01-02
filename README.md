@@ -438,6 +438,7 @@ Notes and Security
 - [ ] Date range validation (end >= start)
 - [ ] Unit tests for amount extraction
 - [ ] Application Insights integration
+ - [ ] Offer merged-PDF export as an option: instead of zipping all individual PDFs together, provide a single merged PDF where each receipt is a separate page (user-selectable).
 
 ## 📝 License
 
