@@ -20,6 +20,14 @@ This application solves a real-world problem: generating accurate tax reports fr
 - 🖨️ Individual PDF generation with embedded images in ZIP archives
 - ⚡ Client secret expiration monitoring with guided renewal instructions
 
+### Screenshot — Main Dashboard
+
+Preview of the main dashboard (click to view all screenshots):
+
+[![Main Dashboard](https://github.com/user-attachments/assets/c2c17e94-74a2-4461-a184-fe5a034224e5)](https://github.com/tomigorn/SBB-EasyRide-TaxReport/wiki/Screenshots)
+
+See all screenshots: https://github.com/tomigorn/SBB-EasyRide-TaxReport/wiki/Screenshots
+
 ## 🏗️ Architecture
 
 The solution follows clean architecture principles with clear separation of concerns:
@@ -41,15 +49,6 @@ SBB-EasyRide-TaxReport/
 │       └── Models/
 │           └── EmailSearchResult.cs            # Domain model
 ```
-
-### Screenshot — Main Dashboard
-
-Preview of the main dashboard (click to view all screenshots):
-
-[![Main Dashboard](https://github.com/user-attachments/assets/c2c17e94-74a2-4461-a184-fe5a034224e5)](https://github.com/tomigorn/SBB-EasyRide-TaxReport/wiki/Screenshots)
-
-See all screenshots: https://github.com/tomigorn/SBB-EasyRide-TaxReport/wiki/Screenshots
-
 
 ### Technology Stack
 
