@@ -28,10 +28,9 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 # Copy published files
 COPY --from=build /app/publish .
 
-# Generate self-signed certificate for HTTPS
-RUN openssl req -x509 -newkey rsa:4096 -keyout /app/localhost.key -out /app/localhost.crt \
-    -days 365 -nodes -subj "/CN=localhost" && \
-    openssl pkcs12 -export -out /app/localhost.pfx -inkey /app/localhost.key -in /app/localhost.crt -passout pass:
+# NOTE: Do not generate or bake private keys into the image. A self-signed certificate
+# was previously created at build time; instead we'll generate an untrusted self-signed
+# certificate at container startup if none is provided. See `entrypoint.sh`.
 
 # Expose ports
 # HTTPS only
@@ -42,7 +41,9 @@ ENV ASPNETCORE_ENVIRONMENT=Production
 # Listen on HTTPS only inside container
 ENV ASPNETCORE_URLS=https://+:8081
 ENV ASPNETCORE_Kestrel__Certificates__Default__Path=/app/localhost.pfx
-ENV ASPNETCORE_Kestrel__Certificates__Default__Password=
 
-# Run the application
-ENTRYPOINT ["dotnet", "SBB.EasyRide.TaxReport.Web.dll"]
+# Copy entrypoint which generates a runtime cert if needed, and start the app
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]

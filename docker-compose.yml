@@ -6,11 +6,12 @@ services:
     container_name: sbb-easyride-taxreport
     ports:
       - "8081:8081"
+    env_file:
+      - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=https://+:8081
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/app/localhost.pfx
-      - ASPNETCORE_Kestrel__Certificates__Default__Password=
       # Azure AD Configuration (populated from .env file)
       - AzureAd__Instance=https://login.microsoftonline.com/
       - AzureAd__TenantId=${AZURE_TENANT_ID}
@@ -25,7 +26,22 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    # volumes:
+      # Optional: mount your own PFX at /app/localhost.pfx to use a custom certificate
+      # Uncomment the following if you have a cert file you want to use:
+      # - ./certs/localhost.pfx:./app/localhost.pfx:ro
+    # Example for passing the PFX password via Docker secrets (optional):
+    # secrets:
+    #   - cert_password
+    # or set the password via environment variable in .env file:
+    # ASPNETCORE_Kestrel__Certificates__Default__Password=
+    # Note: If you do not mount a PFX file, the container will generate a untrusted self-signed cert at startup.
 
 networks:
   app-network:
     driver: bridge
+
+# If you want to use Docker secrets for the PFX password, uncomment and create the secret:
+# echo -n "YourPfxPassword" > cert_password.txt
+# docker secret create cert_password cert_password.txt
+# and add the secret name under the service's `secrets:` section above.
