@@ -547,3 +547,7 @@ FodyWeavers.xsd
 
 # End of https://www.toptal.com/developers/gitignore/api/aspnetcore,visualstudio,visualstudiocode
 
+docs/superpowers/
+.claude/settings.local.json
+CLAUDE.local.md
+AGENTS.md

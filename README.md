@@ -470,3 +470,11 @@ For questions or issues, please open a GitHub issue.
 ---
 
 **Made with ☕ and ❤️ for Swiss tax season**
+### Build & push (multi-arch)
+
+```bash
+docker buildx create --name multiarch --use
+docker buildx build --pull --platform linux/amd64,linux/arm64 -t tomigorn/sbb-easyride-taxreport:latest -t tomigorn/sbb-easyride-taxreport:<version> --push .
+```
+
+On an arm64 host install `qemu-user-static binfmt-support` first. The build stage runs on the build platform (the dotnet SDK crashes under qemu); only the runtime stage is emulated.
